@@ -1,7 +1,8 @@
 ### Hi there 👋
 
 <!--
-**K2/K2** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+**K2/K2** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile. 
+-->
 
 I'll write this out a bit more in time :)
 
@@ -23,4 +24,4 @@ Feel free to email my personal account ktwo@ktwo.ca
 
 - 😄 Pronouns: ...
 - ⚡ Fun fact: ...
--->
+
