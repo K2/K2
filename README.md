@@ -1,3 +1,10 @@
+# K2 
+
+https://www.linkedin.com/in/shanemacaulay
+http://www.ktwo.ca
+https://www.twitter.com/ktwo_K2
+
+
 ### Hi there 👋
 
 <!--
