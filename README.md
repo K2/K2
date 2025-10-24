@@ -1,7 +1,7 @@
 ![b](https://github.com/user-attachments/assets/7526c5c4-fda3-4d1f-803a-0c4487f2b2b4)
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" width="966" height="500" style="max-width:100%;height:auto;" aria-label="Animated neon glyph waterfall" role="img" focusable="true">
 <metadata>
-    <rdf:RDF>
+    <rdf:RDF>By the way I left all this in here because, however it's an artifact of how GitHub ingested and sanitized the input not the SVG being generated incorrectly.
       <cc:Work rdf:about="">
         <dc:title>Matrix Rain Glyph Cascade</dc:title>
         <dc:creator>Shane Macaulay (K2)</dc:creator>
