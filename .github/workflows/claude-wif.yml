@@ -1,0 +1,101 @@
+name: Claude (WIF)
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# GitHub only mints an OIDC token for jobs that ask for it.
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  # None of these are secrets. Set them as repo Variables
+  # (Settings → Secrets and variables → Actions → Variables).
+  ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}   # fdrl_...
+  ANTHROPIC_ORGANIZATION_ID:    ${{ vars.ANTHROPIC_ORGANIZATION_ID }}      # uuid from Console → Settings → Organization
+  ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}   # svac_...
+  ANTHROPIC_WORKSPACE_ID:       ${{ vars.ANTHROPIC_WORKSPACE_ID }}         # wrkspc_... (only needed if the rule spans workspaces)
+  ANTHROPIC_IDENTITY_TOKEN_FILE: ${{ github.workspace }}/.gha-jwt
+  WIF_AUDIENCE: https://api.anthropic.com
+
+jobs:
+  call-claude:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Fetch GitHub OIDC token
+        run: |
+          set -euo pipefail
+          curl -sS --fail -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$WIF_AUDIENCE" \
+            | jq -r .value > "$ANTHROPIC_IDENTITY_TOKEN_FILE"
+          chmod 600 "$ANTHROPIC_IDENTITY_TOKEN_FILE"
+
+          # Print the claims (not the signature) so a subject_prefix mismatch is obvious in the log.
+          echo "::group::OIDC claims"
+          cut -d. -f2 "$ANTHROPIC_IDENTITY_TOKEN_FILE" | tr '_-' '/+' | base64 -d 2>/dev/null \
+            | jq '{iss, sub, aud, repository, repository_owner, ref, event_name}'
+          echo "::endgroup::"
+
+      # GitHub's JWT lives ~5 min. The SDK re-reads the file on each refresh, so keep it fresh
+      # for long jobs. Drop this step if your job finishes in a couple of minutes.
+      - name: Keep OIDC token fresh (background)
+        run: |
+          (
+            while sleep 240; do
+              curl -sS --fail -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$WIF_AUDIENCE" \
+                | jq -r .value > "$ANTHROPIC_IDENTITY_TOKEN_FILE.tmp" \
+                && mv "$ANTHROPIC_IDENTITY_TOKEN_FILE.tmp" "$ANTHROPIC_IDENTITY_TOKEN_FILE"
+            done
+          ) &
+          echo $! > "$RUNNER_TEMP/jwt-refresh.pid"
+
+      # Sanity check: do the exchange by hand once so failures show up here, not deep in your script.
+      - name: Verify token exchange
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sS https://api.anthropic.com/v1/oauth/token \
+            -H "content-type: application/json" \
+            --data @- <<JSON
+          {
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": "$(cat "$ANTHROPIC_IDENTITY_TOKEN_FILE")",
+            "federation_rule_id": "$ANTHROPIC_FEDERATION_RULE_ID",
+            "organization_id": "$ANTHROPIC_ORGANIZATION_ID",
+            "service_account_id": "$ANTHROPIC_SERVICE_ACCOUNT_ID",
+            "workspace_id": "$ANTHROPIC_WORKSPACE_ID"
+          }
+          JSON
+          )
+          if ! echo "$RESPONSE" | jq -e '.access_token | startswith("sk-ant-oat01-")' >/dev/null; then
+            echo "::error::Token exchange failed. Check the WIF auth history page for the deny reason."
+            echo "$RESPONSE" | jq .
+            exit 1
+          fi
+          echo "Exchange OK, expires_in=$(echo "$RESPONSE" | jq -r .expires_in)s"
+
+      # Replace this with your real work. The SDK picks up the ANTHROPIC_* env vars
+      # and does the exchange + refresh itself, so no API key is involved.
+      - name: Run your script
+        run: |
+          pip install -q anthropic
+          python - <<'PY'
+          import anthropic
+          client = anthropic.Anthropic()
+          msg = client.messages.create(
+              model="claude-sonnet-5-5",
+              max_tokens=64,
+              messages=[{"role": "user", "content": "Reply with the single word: ok"}],
+          )
+          print(next(b.text for b in msg.content if b.type == "text"))
+          PY
+
+      - name: Cleanup
+        if: always()
+        run: |
+          [ -f "$RUNNER_TEMP/jwt-refresh.pid" ] && kill "$(cat "$RUNNER_TEMP/jwt-refresh.pid")" 2>/dev/null || true
+          rm -f "$ANTHROPIC_IDENTITY_TOKEN_FILE" "$ANTHROPIC_IDENTITY_TOKEN_FILE.tmp"
