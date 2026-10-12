@@ -36,7 +36,12 @@ jobs:
 
           # Print the claims (not the signature) so a subject_prefix mismatch is obvious in the log.
           echo "::group::OIDC claims"
-          cut -d. -f2 "$ANTHROPIC_IDENTITY_TOKEN_FILE" | tr '_-' '/+' | base64 -d 2>/dev/null \
+          payload=$(cut -d. -f2 "$ANTHROPIC_IDENTITY_TOKEN_FILE" | tr '_-' '/+')
+          case $((${#payload} % 4)) in
+            2) payload="${payload}==" ;;
+            3) payload="${payload}=" ;;
+          esac
+          printf '%s' "$payload" | base64 -d 2>/dev/null \
             | jq '{iss, sub, aud, repository, repository_owner, ref, event_name}'
           echo "::endgroup::"
 
